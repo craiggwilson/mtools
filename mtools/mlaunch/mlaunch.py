@@ -976,7 +976,11 @@ class MLaunchTool(BaseCmdLineTool):
 
         for port in ports:
             command_str = self.startup_info[str(port)]
-            ret = subprocess.call([command_str], stderr=subprocess.STDOUT, stdout=subprocess.PIPE, shell=True)
+
+            # windows requires that the first element be an executable
+            # with the rest of the arguments as additional array items
+            command_parts = command_str.split()
+            popen = subprocess.Popen(command_parts, stderr=subprocess.STDOUT, stdout=subprocess.PIPE, shell=True)
             
             binary = command_str.split()[0]
             if '--configsvr' in command_str:
@@ -987,6 +991,7 @@ class MLaunchTool(BaseCmdLineTool):
             else:
                 print "launching: %s on port %s" % (binary, port)
 
+            ret = popen.poll()
             if ret > 0:
                 raise SystemExit("can't start process, return code %i. tried to launch: %s"% (ret, command_str))
 
@@ -1193,7 +1198,15 @@ class MLaunchTool(BaseCmdLineTool):
             extra = self._filter_valid_arguments(self.unknown_args, "mongod", config=config) + ' ' + extra
 
         path = self.args['binarypath'] or ''
-        command_str = "%s %s --dbpath %s --logpath %s --port %i --logappend %s %s --fork"%(os.path.join(path, 'mongod'), rs_param, dbpath, logpath, port, auth_param, extra)
+        name = 'mongod'
+        # change the name to include .exe only if running on windows and an explicit path was specified
+        if path != '' and os.name == 'nt':
+            name += '.exe'
+
+        command_str = "%s %s --dbpath %s --logpath %s --port %i --logappend %s %s"%(os.path.join(path, name), rs_param, dbpath, logpath, port, auth_param, extra)
+
+        if os.name != 'nt':
+            command_str += ' --fork'
 
         # store parameters in startup_info
         self.startup_info[str(port)] = command_str
@@ -1215,12 +1228,19 @@ class MLaunchTool(BaseCmdLineTool):
             extra = self._filter_valid_arguments(self.unknown_args, "mongos") + extra
 
         path = self.args['binarypath'] or ''
-        command_str = "%s --logpath %s --port %i --configdb %s --logappend %s %s --fork"%(os.path.join(path, 'mongos'), logpath, port, configdb, auth_param, extra)
+        name = 'mongos'
+        # change the name to include .exe only if running on windows and an explicit path was specified
+        if os.name == 'nt':
+            name += '.exe'
+
+        command_str = "%s --logpath %s --port %i --configdb %s --logappend %s %s"%(os.path.join(path, name), logpath, port, configdb, auth_param, extra)
+
+        if os.name != "nt":
+            command_str += " --fork"
 
         # store parameters in startup_info
         self.startup_info[str(port)] = command_str
-
-
+        
 
 
 if __name__ == '__main__':
